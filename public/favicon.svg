@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2554a6"/>
+      <stop offset="100%" stop-color="#0f254f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f6dc84"/>
+      <stop offset="50%" stop-color="#cfa035"/>
+      <stop offset="100%" stop-color="#8c6517"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="22" fill="url(#bg)" stroke="url(#gold)" stroke-width="6"/>
+  <!-- Inverted Omega / Ultima Symbol -->
+  <path d="M 38 30 L 52 30 L 52 40 L 44 40 L 44 58 C 44 74 52 84 64 84 C 76 84 84 74 84 58 L 84 40 L 76 40 L 76 30 L 90 30 L 96 30 L 96 42 L 94 42 L 94 59 C 94 82 81 97 64 97 C 47 97 34 82 34 59 L 34 42 L 32 42 L 32 30 Z" fill="#f3f6fb" stroke="#0d1b38" stroke-width="2.5"/>
+  <rect x="30" y="28" width="22" height="9" rx="1.5" fill="url(#gold)"/>
+  <rect x="76" y="28" width="22" height="9" rx="1.5" fill="url(#gold)"/>
+</svg>

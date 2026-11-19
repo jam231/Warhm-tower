@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Spires of Ultramar — Warhammer 40K Tower Ascent</title>
+    <meta
+      name="description"
+      content="Ascend the Hive Spire as a Space Marine in this Warhammer 40,000 Icy Tower-inspired vertical arcade jumper. Choose your Chapter, purge Chaos heretics, collect Imperial relics, and play on phone, iPad, or desktop."
+    />
+    <meta name="theme-color" content="#122854" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ultramar Tower" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Cinzel:wght@600;700;800&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main id="app" class="app-shell">
+      <section class="stage-frame" id="stage-frame" aria-label="Game Viewport">
+        <canvas id="game-canvas" aria-label="Spires of Ultramar Game Canvas"></canvas>
+
+        <!-- In-Game Imperial Cogitator HUD -->
+        <header id="hud-bar" class="hud-bar is-hidden" aria-live="off">
+          <div class="hud-metrics">
+            <div class="hud-stat">
+              <span class="hud-label">FLOOR</span>
+              <span id="hud-floor" class="hud-value">0</span>
+            </div>
+            <div class="hud-stat">
+              <span class="hud-label">SCORE</span>
+              <span id="hud-score" class="hud-value">0</span>
+            </div>
+            <div class="hud-stat hud-stat-best">
+              <span class="hud-label">PURGED</span>
+              <span id="hud-purges" class="hud-value">0</span>
+            </div>
+          </div>
+
+          <div class="hud-actions">
+            <span id="hud-halo-badge" class="halo-badge is-hidden" title="Iron Halo Shield Active">
+              ✦ HALO
+            </span>
+            <button
+              id="btn-mute"
+              class="icon-btn"
+              type="button"
+              aria-label="Toggle Sound"
+              title="Toggle Sound (M)"
+            >
+              <svg id="icon-sound-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              </svg>
+              <svg id="icon-sound-off" class="is-hidden" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+              </svg>
+            </button>
+            <button
+              id="btn-pause"
+              class="icon-btn"
+              type="button"
+              aria-label="Pause Game"
+              title="Pause (P)"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <rect x="6" y="4" width="4.5" height="16" rx="1"></rect>
+                <rect x="13.5" y="4" width="4.5" height="16" rx="1"></rect>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Active Combo Meter ("ZEAL COMBO") -->
+        <div id="combo-hud" class="combo-hud is-hidden" aria-live="polite">
+          <div class="combo-header">
+            <span class="combo-tag">ZEAL COMBO</span>
+            <span id="combo-count" class="combo-count">+0 FLOORS</span>
+          </div>
+          <div class="combo-track">
+            <div id="combo-fill" class="combo-fill"></div>
+          </div>
+        </div>
+
+        <!-- Title Screen Overlay -->
+        <div id="overlay-title" class="overlay-screen">
+          <div class="panel-plate title-plate">
+            <p id="title-motto" class="chapter-motto">COURAGE AND HONOUR</p>
+            <h1 class="game-title">SPIRES OF ULTRAMAR</h1>
+            <p class="game-subtitle">
+              Chain momentum jumps &amp; wall rebounds, stomp Chaos heretics, and seize Imperial relics before the Warp purge rises.
+            </p>
+
+            <!-- Selectable Space Marine Chapters -->
+            <div class="chapter-picker" aria-label="Select Space Marine Chapter">
+              <div class="chapter-picker-header">
+                <span class="record-label">SELECT CHAPTER</span>
+                <span id="selected-chapter-name" class="chapter-name-label">Ultramarines</span>
+              </div>
+              <div id="chapter-list" class="chapter-list" role="radiogroup" aria-label="Space Marine Chapters"></div>
+            </div>
+
+            <div class="records-strip" id="title-records">
+              <div class="record-cell">
+                <span class="record-label">HIGH SCORE</span>
+                <span id="title-best-score" class="record-val">0</span>
+              </div>
+              <div class="record-cell">
+                <span class="record-label">MAX FLOOR</span>
+                <span id="title-best-floor" class="record-val">0</span>
+              </div>
+              <div class="record-cell">
+                <span class="record-label">BEST COMBO</span>
+                <span id="title-best-combo" class="record-val">0</span>
+              </div>
+            </div>
+
+            <button id="btn-start" class="btn-imperial btn-primary" type="button">
+              BEGIN ASCENT
+            </button>
+
+            <div class="controls-legend">
+              <div class="legend-row">
+                <span class="legend-key">A / D or ← / →</span>
+                <span class="legend-desc">Sprint &amp; Wall Rebound</span>
+              </div>
+              <div class="legend-row">
+                <span class="legend-key">SPACE / W / ↑</span>
+                <span class="legend-desc">Jump Pack (Stomp or Spin to Purge)</span>
+              </div>
+              <div class="legend-row">
+                <span class="legend-key">PHONE / IPAD</span>
+                <span class="legend-desc">Rocker, Split Buttons &amp; Auto-Jump in Pause</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pause Overlay -->
+        <div id="overlay-pause" class="overlay-screen is-hidden">
+          <div class="panel-plate compact-plate">
+            <p class="chapter-motto">VOX CHANNEL HELD</p>
+            <h2 class="overlay-heading">ASCENT PAUSED</h2>
+
+            <div class="settings-list">
+              <button id="btn-toggle-touch" class="btn-setting" type="button">
+                <span>Touch Controls</span>
+                <strong id="label-touch-mode">Auto</strong>
+              </button>
+              <button id="btn-toggle-layout" class="btn-setting" type="button">
+                <span>Touch Layout</span>
+                <strong id="label-touch-layout">Slide Rocker</strong>
+              </button>
+              <button id="btn-toggle-autojump" class="btn-setting" type="button">
+                <span>Auto-Jump</span>
+                <strong id="label-autojump">Off</strong>
+              </button>
+              <button id="btn-swap-sides" class="btn-setting" type="button">
+                <span>Swap Touch Sides</span>
+                <strong id="label-swap-sides">Default</strong>
+              </button>
+              <button id="btn-pause-mute" class="btn-setting" type="button">
+                <span>Audio Vox</span>
+                <strong id="label-mute-state">On</strong>
+              </button>
+            </div>
+
+            <div class="button-stack">
+              <button id="btn-resume" class="btn-imperial btn-primary" type="button">
+                RESUME DUTY
+              </button>
+              <button id="btn-pause-restart" class="btn-imperial btn-secondary" type="button">
+                RESTART SPIRE
+              </button>
+              <button id="btn-to-title" class="btn-text" type="button">
+                Change Chapter / Briefing
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="overlay-gameover" class="overlay-screen is-hidden">
+          <div class="panel-plate compact-plate">
+            <p id="gameover-badge" class="chapter-motto">ONLY IN DEATH DOES DUTY END</p>
+            <h2 class="overlay-heading">FALLEN IN THE SPIRE</h2>
+
+            <div class="summary-grid">
+              <div class="summary-cell">
+                <span class="record-label">SCORE</span>
+                <span id="over-score" class="summary-val">0</span>
+              </div>
+              <div class="summary-cell">
+                <span class="record-label">FLOOR</span>
+                <span id="over-floor" class="summary-val">0</span>
+              </div>
+              <div class="summary-cell">
+                <span class="record-label">HERETICS PURGED</span>
+                <span id="over-purges" class="summary-val">0</span>
+              </div>
+              <div class="summary-cell">
+                <span class="record-label">BEST COMBO</span>
+                <span id="over-combo" class="summary-val">0</span>
+              </div>
+            </div>
+
+            <div class="button-stack">
+              <button id="btn-retry" class="btn-imperial btn-primary" type="button">
+                ASCEND AGAIN
+              </button>
+              <button id="btn-over-title" class="btn-text" type="button">
+                Change Chapter / Briefing
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Multi-Touch Ergonomic Controls (Phone & iPad) -->
+        <div id="touch-controls" class="touch-controls is-hidden" aria-label="Touch Controls">
+          <!-- Layout A: Continuous Slide Rocker -->
+          <div id="touch-move-pad" class="touch-rocker" role="slider" aria-label="Move Left or Right" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
+            <span class="rocker-arrow rocker-left" aria-hidden="true">◀</span>
+            <div class="rocker-track">
+              <div id="touch-move-knob" class="rocker-knob"></div>
+            </div>
+            <span class="rocker-arrow rocker-right" aria-hidden="true">▶</span>
+          </div>
+
+          <!-- Layout B: Discrete Split Left / Right Buttons -->
+          <div id="touch-split-pad" class="touch-split-pad is-hidden" aria-label="Directional Buttons">
+            <button id="touch-left-btn" class="touch-dir-btn" type="button" aria-label="Move Left">
+              ◀
+            </button>
+            <button id="touch-right-btn" class="touch-dir-btn" type="button" aria-label="Move Right">
+              ▶
+            </button>
+          </div>
+
+          <button id="touch-jump-btn" class="touch-jump" type="button" aria-label="Jump Pack">
+            <span class="jump-chevron" aria-hidden="true">▲</span>
+            <span id="touch-jump-caption" class="jump-caption">JUMP</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
