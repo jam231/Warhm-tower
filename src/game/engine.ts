@@ -124,9 +124,12 @@ export class GameEngine {
   }
 
   public resize(width: number, height: number): void {
-    this.renderer.resize(width, height);
+    const oldVh = this.renderer.viewHeight;
+    const newVh = this.renderer.resize(width, height);
     if (this.phase === 'title') {
-      this.cameraY = -(this.renderer.viewHeight - 132);
+      this.cameraY = -(newVh - 132);
+    } else if (oldVh !== newVh) {
+      this.cameraY += oldVh - newVh;
     }
   }
 

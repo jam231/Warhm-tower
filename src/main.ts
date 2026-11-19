@@ -7,6 +7,16 @@ import { SoundEngine } from './game/sound';
 import { loadSettings, saveSettings } from './game/storage';
 import type { ChapterId, GameSettings, HudSnapshot } from './game/types';
 
+interface WebKitFullscreenDocument extends Document {
+  webkitFullscreenElement?: Element | null;
+  webkitFullscreenEnabled?: boolean;
+  webkitExitFullscreen?: () => Promise<void> | void;
+}
+
+interface WebKitFullscreenElement extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+}
+
 function mustGet<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) {
@@ -15,8 +25,60 @@ function mustGet<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+function isAppleTouchDevice(): boolean {
+  const ua = navigator.userAgent || '';
+  return (
+    /iPad|iPhone|iPod/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
 function isTouchDevice(): boolean {
-  return window.matchMedia('(pointer: coarse)').matches;
+  return window.matchMedia('(pointer: coarse)').matches || isAppleTouchDevice();
+}
+
+function isStandaloneMode(): boolean {
+  const nav = navigator as Navigator & { standalone?: boolean };
+  return (
+    nav.standalone === true ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    window.matchMedia('(display-mode: standalone)').matches
+  );
+}
+
+function isFullscreenSupported(): boolean {
+  const doc = document as WebKitFullscreenDocument;
+  const el = document.documentElement as WebKitFullscreenElement;
+  const hasRequest =
+    typeof el.requestFullscreen === 'function' ||
+    typeof el.webkitRequestFullscreen === 'function';
+  const enabled = doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled ?? true;
+  return hasRequest && enabled !== false;
+}
+
+function isCurrentlyFullscreen(): boolean {
+  const doc = document as WebKitFullscreenDocument;
+  return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+}
+
+async function toggleDocumentFullscreen(): Promise<void> {
+  const doc = document as WebKitFullscreenDocument;
+  const root = document.documentElement as WebKitFullscreenElement;
+  try {
+    if (isCurrentlyFullscreen()) {
+      if (typeof doc.exitFullscreen === 'function') {
+        await doc.exitFullscreen();
+      } else if (typeof doc.webkitExitFullscreen === 'function') {
+        await doc.webkitExitFullscreen();
+      }
+    } else if (typeof root.requestFullscreen === 'function') {
+      await root.requestFullscreen();
+    } else if (typeof root.webkitRequestFullscreen === 'function') {
+      await root.webkitRequestFullscreen();
+    }
+  } catch {
+    // Ignore rejection when browser policy disallows fullscreen
+  }
 }
 
 function bootstrap(): void {
@@ -55,6 +117,11 @@ function bootstrap(): void {
 
   // Buttons & Settings
   const btnStart = mustGet<HTMLButtonElement>('btn-start');
+  const btnTitleFullscreen = mustGet<HTMLButtonElement>('btn-title-fullscreen');
+  const iosFsTip = mustGet<HTMLElement>('ios-fs-tip');
+  const btnFullscreen = mustGet<HTMLButtonElement>('btn-fullscreen');
+  const iconFsEnter = mustGet<HTMLElement>('icon-fs-enter');
+  const iconFsExit = mustGet<HTMLElement>('icon-fs-exit');
   const btnPause = mustGet<HTMLButtonElement>('btn-pause');
   const btnMute = mustGet<HTMLButtonElement>('btn-mute');
   const iconSoundOn = mustGet<HTMLElement>('icon-sound-on');
@@ -66,6 +133,8 @@ function bootstrap(): void {
   const btnRetry = mustGet<HTMLButtonElement>('btn-retry');
   const btnOverTitle = mustGet<HTMLButtonElement>('btn-over-title');
 
+  const btnPauseFullscreen = mustGet<HTMLButtonElement>('btn-pause-fullscreen');
+  const labelFullscreenState = mustGet<HTMLElement>('label-fullscreen-state');
   const btnToggleTouch = mustGet<HTMLButtonElement>('btn-toggle-touch');
   const labelTouchMode = mustGet<HTMLElement>('label-touch-mode');
   const btnToggleLayout = mustGet<HTMLButtonElement>('btn-toggle-layout');
@@ -89,6 +158,7 @@ function bootstrap(): void {
 
   const settings: GameSettings = loadSettings();
   let touchDetected = isTouchDevice();
+  const fsSupported = isFullscreenSupported() && !isStandaloneMode();
 
   const sound = new SoundEngine(settings.muted);
   const renderer = new TowerRenderer(canvas);
@@ -117,6 +187,24 @@ function bootstrap(): void {
     chapterButtons.set(ch.id, btn);
     chapterListEl.appendChild(btn);
   }
+
+  const syncFullscreenUi = (): void => {
+    const active = isCurrentlyFullscreen();
+    btnFullscreen.classList.toggle('is-hidden', !fsSupported);
+    btnTitleFullscreen.classList.toggle('is-hidden', !fsSupported);
+    btnPauseFullscreen.classList.toggle('is-hidden', !fsSupported);
+
+    // Show Add-to-Home-Screen hint on iOS/iPadOS browsers without Fullscreen API
+    iosFsTip.classList.toggle(
+      'is-hidden',
+      fsSupported || isStandaloneMode() || !isAppleTouchDevice(),
+    );
+
+    iconFsEnter.classList.toggle('is-hidden', active);
+    iconFsExit.classList.toggle('is-hidden', !active);
+    labelFullscreenState.textContent = active ? 'On' : 'Off';
+    btnTitleFullscreen.textContent = active ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
+  };
 
   const syncChapterUi = (): void => {
     const active = getChapterTheme(settings.chapter);
@@ -169,6 +257,14 @@ function bootstrap(): void {
     syncSettingsUi();
   };
 
+  const handleFullscreenToggle = (): void => {
+    if (!fsSupported) return;
+    void toggleDocumentFullscreen().then(() => {
+      syncFullscreenUi();
+      window.setTimeout(handleResize, 60);
+    });
+  };
+
   const input = new InputManager({
     onFirstGesture: () => sound.unlock(),
     onPauseToggle: () => engine.togglePause(),
@@ -182,6 +278,7 @@ function bootstrap(): void {
       }
     },
     onMuteToggle: toggleMute,
+    onFullscreenToggle: handleFullscreenToggle,
     onTouchDetected: () => {
       if (!touchDetected) {
         touchDetected = true;
@@ -191,8 +288,11 @@ function bootstrap(): void {
   });
 
   input.bindTouchElements({
+    canvas,
+    touchRoot: touchControls,
     movePad: touchMovePad,
     moveKnob: touchMoveKnob,
+    splitPad: touchSplitPad,
     leftBtn: touchLeftBtn,
     rightBtn: touchRightBtn,
     jumpBtn: touchJumpBtn,
@@ -260,6 +360,18 @@ function bootstrap(): void {
   btnStart.addEventListener('click', () => {
     blurActive();
     engine.startGame();
+  });
+  btnTitleFullscreen.addEventListener('click', () => {
+    blurActive();
+    handleFullscreenToggle();
+  });
+  btnFullscreen.addEventListener('click', () => {
+    blurActive();
+    handleFullscreenToggle();
+  });
+  btnPauseFullscreen.addEventListener('click', () => {
+    blurActive();
+    handleFullscreenToggle();
   });
   btnPause.addEventListener('click', () => {
     blurActive();
@@ -331,16 +443,31 @@ function bootstrap(): void {
   });
 
   const handleResize = (): void => {
-    const rect = stageFrame.getBoundingClientRect();
-    engine.resize(rect.width, rect.height);
+    const vp = window.visualViewport;
+    const width = Math.round(vp?.width ?? window.innerWidth ?? stageFrame.clientWidth);
+    const height = Math.round(vp?.height ?? window.innerHeight ?? stageFrame.clientHeight);
+    document.documentElement.style.setProperty('--app-height', `${height}px`);
+    engine.resize(width, height);
   };
 
   handleResize();
   window.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('scroll', handleResize);
   window.addEventListener('orientationchange', () => {
     window.setTimeout(handleResize, 120);
+    window.setTimeout(handleResize, 320);
+  });
+  document.addEventListener('fullscreenchange', () => {
+    syncFullscreenUi();
+    window.setTimeout(handleResize, 60);
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    syncFullscreenUi();
+    window.setTimeout(handleResize, 60);
   });
 
+  syncFullscreenUi();
   syncChapterUi();
   syncSettingsUi();
   engine.startLoop();

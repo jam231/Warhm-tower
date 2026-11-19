@@ -40,10 +40,14 @@ export interface RenderContextState {
   hurryFlash: number;
 }
 
+const MIN_VIEW_HEIGHT = 660;
+
 export class TowerRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
+  public viewWidth = WORLD_WIDTH;
   public viewHeight = 720;
+  public worldOffsetX = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -56,32 +60,43 @@ export class TowerRenderer {
 
   public resize(containerWidth: number, containerHeight: number): number {
     const safeW = Math.max(240, containerWidth);
-    const safeH = Math.max(360, containerHeight);
+    const safeH = Math.max(320, containerHeight);
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-    const aspect = safeH / safeW;
-    const clampedAspect = Math.max(1.22, Math.min(1.88, aspect));
-    this.viewHeight = Math.round(WORLD_WIDTH * clampedAspect);
+    // Uniform scale: always fit the full 480px tower horizontally AND at least
+    // MIN_VIEW_HEIGHT vertically while filling 100% of the viewport edge-to-edge.
+    const scale = Math.min(safeW / WORLD_WIDTH, safeH / MIN_VIEW_HEIGHT);
+    this.viewWidth = safeW / scale;
+    this.viewHeight = safeH / scale;
+    this.worldOffsetX = Math.max(0, (this.viewWidth - WORLD_WIDTH) / 2);
 
-    this.canvas.width = Math.round(WORLD_WIDTH * dpr);
-    this.canvas.height = Math.round(this.viewHeight * dpr);
+    this.canvas.width = Math.max(1, Math.round(safeW * dpr));
+    this.canvas.height = Math.max(1, Math.round(safeH * dpr));
+    this.canvas.style.width = `${safeW}px`;
+    this.canvas.style.height = `${safeH}px`;
 
-    const scale = Math.min(safeW / WORLD_WIDTH, safeH / this.viewHeight);
-    this.canvas.style.width = `${Math.floor(WORLD_WIDTH * scale)}px`;
-    this.canvas.style.height = `${Math.floor(this.viewHeight * scale)}px`;
-
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     return this.viewHeight;
   }
 
   public render(state: RenderContextState): void {
     const ctx = this.ctx;
+    const vw = this.viewWidth;
     const vh = this.viewHeight;
 
     const cameraCenterFloor = Math.max(0, Math.floor(-(state.cameraY + vh * 0.5) / FLOOR_SPACING));
     const biome = getBiomeForFloor(cameraCenterFloor);
 
     ctx.save();
+
+    // 0. Full-bleed Gothic Fortress Buttress Wings (fills wide iPad/desktop viewports seamlessly)
+    if (this.worldOffsetX > 0.5) {
+      this.drawFortressWings(ctx, biome, state.cameraY, vw, vh, this.worldOffsetX, state.time);
+    }
+
+    // Center the exact 480px gameplay tower shaft inside the full-screen canvas
+    ctx.save();
+    ctx.translate(this.worldOffsetX, 0);
 
     // 1. Deep Gothic Sky / Spire Interior Backdrop
     this.drawBackdrop(ctx, biome, state.cameraY, vh, state.time);
@@ -113,16 +128,115 @@ export class TowerRenderer {
 
     ctx.restore(); // end shake
 
-    // 5. Hurry-Up Crimson Pulse Overlay
-    if (state.hurryFlash > 0) {
-      ctx.fillStyle = `rgba(215, 36, 36, ${state.hurryFlash * 0.24})`;
-      ctx.fillRect(0, 0, WORLD_WIDTH, vh);
-    }
-
-    // 6. Screen-Space Dramatic Banners
+    // 5. Screen-Space Dramatic Banners (centered over the playable tower shaft)
     this.drawScreenBanners(ctx, state.banners, vh);
 
+    ctx.restore(); // end worldOffsetX translate
+
+    // 6. Full-screen Hurry-Up Crimson Pulse Overlay
+    if (state.hurryFlash > 0) {
+      ctx.fillStyle = `rgba(215, 36, 36, ${state.hurryFlash * 0.24})`;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+
     ctx.restore();
+  }
+
+  private drawFortressWings(
+    ctx: CanvasRenderingContext2D,
+    biome: BiomeTheme,
+    cameraY: number,
+    vw: number,
+    vh: number,
+    wingW: number,
+    time: number,
+  ): void {
+    // Deep armored backdrop across full screen
+    const bg = ctx.createLinearGradient(0, 0, 0, vh);
+    bg.addColorStop(0, biome.skyTop);
+    bg.addColorStop(1, biome.skyBottom);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, vw, vh);
+
+    const rightStart = wingW + WORLD_WIDTH;
+    const drawSide = (x: number, w: number, isRight: boolean): void => {
+      if (w <= 0) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, 0, w, vh);
+      ctx.clip();
+
+      // Subtle darker armored cladding
+      ctx.fillStyle = 'rgba(4, 7, 13, 0.48)';
+      ctx.fillRect(x, 0, w, vh);
+
+      // Vertical Gothic buttress columns
+      const colStep = 92;
+      ctx.fillStyle = biome.archColor;
+      for (let cx = isRight ? x + 28 : x + w - 44; isRight ? cx < x + w : cx > x - 20; cx += isRight ? colStep : -colStep) {
+        ctx.fillRect(cx, 0, 18, vh);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.fillRect(cx + 2, 0, 3, vh);
+        ctx.fillStyle = biome.archColor;
+      }
+
+      // Parallax horizontal masonry courses & pointed cathedral arches
+      const courseH = 110;
+      const offset = ((cameraY * 0.35) % courseH + courseH) % courseH;
+      ctx.strokeStyle = biome.archHighlight;
+      ctx.lineWidth = 2;
+      for (let y = -offset - courseH; y < vh + courseH; y += courseH) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+        ctx.fillRect(x, y, w, 2);
+
+        if (w > 64) {
+          const archCenter = isRight ? x + Math.min(w * 0.5, 118) : x + w - Math.min(w * 0.5, 118);
+          const halfSpan = Math.min(54, w * 0.36);
+          ctx.globalAlpha = 0.45;
+          ctx.beginPath();
+          ctx.moveTo(archCenter - halfSpan, y + courseH);
+          ctx.quadraticCurveTo(archCenter - halfSpan, y + 28, archCenter, y + 8);
+          ctx.quadraticCurveTo(archCenter + halfSpan, y + 28, archCenter + halfSpan, y + courseH);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // Outer tower border trim + soft vignette shadow
+      const seamX = isRight ? x : x + w - 2;
+      ctx.fillStyle = biome.wallTrim;
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(seamX, 0, 2, vh);
+      ctx.globalAlpha = 1;
+
+      const fade = ctx.createLinearGradient(
+        isRight ? x : x + w,
+        0,
+        isRight ? x + w : x,
+        0,
+      );
+      fade.addColorStop(0, 'rgba(0, 0, 0, 0.25)');
+      fade.addColorStop(0.65, 'rgba(0, 0, 0, 0.45)');
+      fade.addColorStop(1, 'rgba(0, 0, 0, 0.72)');
+      ctx.fillStyle = fade;
+      ctx.fillRect(x, 0, w, vh);
+
+      // Subtle floating ambient embers in the fortress wings
+      ctx.fillStyle = biome.ambientEmber;
+      for (let i = 0; i < 6; i++) {
+        const seed = (isRight ? 17 : 7) + i * 53.7;
+        const ex = x + ((seed * 41) % Math.max(12, w - 12)) + 6;
+        const ey = ((seed * 29 - cameraY * 0.3 - time * (12 + (i % 3) * 4)) % vh + vh) % vh;
+        ctx.globalAlpha = 0.12 + 0.1 * Math.sin(time * 2 + seed);
+        ctx.fillRect(ex, ey, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+    };
+
+    drawSide(0, wingW, false);
+    drawSide(rightStart, vw - rightStart, true);
   }
 
   private drawBackdrop(
